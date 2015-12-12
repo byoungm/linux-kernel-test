@@ -147,7 +147,7 @@ static void xlr_net_fmn_handler(int bkt, int src_stnid, int size,
 		addr = addr - MAC_SKB_BACK_PTR_SIZE;
 		skb = (struct sk_buff *) *(unsigned long *)addr;
 		skb->dev = adapter->netdev[port];
-		if (skb->dev == NULL)
+		if (!skb->dev)
 			return;
 		ndev = skb->dev;
 		priv = netdev_priv(ndev);
@@ -878,7 +878,7 @@ static int xlr_setup_mdio(struct xlr_net_priv *priv,
 	priv->mii_bus->write = xlr_mii_write;
 	priv->mii_bus->parent = &pdev->dev;
 	priv->mii_bus->irq = kmalloc(sizeof(int)*PHY_MAX_ADDR, GFP_KERNEL);
-	if (priv->mii_bus->irq == NULL) {
+	if (!priv->mii_bus->irq) {
 		pr_err("irq alloc failed\n");
 		mdiobus_free(priv->mii_bus);
 		return -ENOMEM;
@@ -1037,7 +1037,7 @@ static int xlr_net_probe(struct platform_device *pdev)
 		priv->nd = (struct xlr_net_data *)pdev->dev.platform_data;
 		res = platform_get_resource(pdev, IORESOURCE_MEM, port);
 
-		if (res == NULL) {
+		if (!res) {
 			pr_err("No memory resource for MAC %d\n",
 					priv->port_id);
 			err = -ENODEV;
@@ -1052,7 +1052,7 @@ static int xlr_net_probe(struct platform_device *pdev)
 		adapter->netdev[port] = ndev;
 
 		res = platform_get_resource(pdev, IORESOURCE_IRQ, port);
-		if (res == NULL) {
+		if (!res) {
 			pr_err("No irq resource for MAC %d\n", priv->port_id);
 			err = -ENODEV;
 			goto err_gmac;
