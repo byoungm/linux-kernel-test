@@ -167,6 +167,16 @@ extern struct page *empty_zero_page;
 	((pte_val(pte) & (PTE_VALID | PTE_USER)) == (PTE_VALID | PTE_USER))
 #define pte_valid_not_user(pte) \
 	((pte_val(pte) & (PTE_VALID | PTE_USER)) == PTE_VALID)
+#define pte_valid_young(pte) \
+	((pte_val(pte) & (PTE_VALID | PTE_AF)) == (PTE_VALID | PTE_AF))
+
+/*
+ * Could the pte be present in the TLB? We must check mm_tlb_flush_pending
+ * so that we don't erroneously return false for pages that have been
+ * remapped as PROT_NONE but are yet to be flushed from the TLB.
+ */
+#define pte_accessible(mm, pte)	\
+	(mm_tlb_flush_pending(mm) ? pte_present(pte) : pte_valid_young(pte))
 
 static inline pte_t clear_pte_bit(pte_t pte, pgprot_t prot)
 {
@@ -276,10 +286,14 @@ static inline void set_pte_at(struct mm_struct *mm, unsigned long addr,
 	 * hardware updates of the pte (ptep_set_access_flags safely changes
 	 * valid ptes without going through an invalid entry).
 	 */
-	if (IS_ENABLED(CONFIG_DEBUG_VM) && IS_ENABLED(CONFIG_ARM64_HW_AFDBM) &&
-	    pte_valid(*ptep)) {
-		BUG_ON(!pte_young(pte));
-		BUG_ON(pte_write(*ptep) && !pte_dirty(pte));
+	if (IS_ENABLED(CONFIG_ARM64_HW_AFDBM) &&
+	    pte_valid(*ptep) && pte_valid(pte)) {
+		VM_WARN_ONCE(!pte_young(pte),
+			     "%s: racy access flag clearing: 0x%016llx -> 0x%016llx",
+			     __func__, pte_val(*ptep), pte_val(pte));
+		VM_WARN_ONCE(pte_write(*ptep) && !pte_dirty(pte),
+			     "%s: racy dirty state clearing: 0x%016llx -> 0x%016llx",
+			     __func__, pte_val(*ptep), pte_val(pte));
 	}
 
 	set_pte(ptep, pte);
@@ -333,21 +347,14 @@ static inline pgprot_t mk_sect_prot(pgprot_t prot)
 
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 #define pmd_trans_huge(pmd)	(pmd_val(pmd) && !(pmd_val(pmd) & PMD_TABLE_BIT))
-#define pmd_trans_splitting(pmd)	pte_special(pmd_pte(pmd))
-#ifdef CONFIG_HAVE_RCU_TABLE_FREE
-#define __HAVE_ARCH_PMDP_SPLITTING_FLUSH
-struct vm_area_struct;
-void pmdp_splitting_flush(struct vm_area_struct *vma, unsigned long address,
-			  pmd_t *pmdp);
-#endif /* CONFIG_HAVE_RCU_TABLE_FREE */
 #endif /* CONFIG_TRANSPARENT_HUGEPAGE */
 
 #define pmd_dirty(pmd)		pte_dirty(pmd_pte(pmd))
 #define pmd_young(pmd)		pte_young(pmd_pte(pmd))
 #define pmd_wrprotect(pmd)	pte_pmd(pte_wrprotect(pmd_pte(pmd)))
-#define pmd_mksplitting(pmd)	pte_pmd(pte_mkspecial(pmd_pte(pmd)))
 #define pmd_mkold(pmd)		pte_pmd(pte_mkold(pmd_pte(pmd)))
 #define pmd_mkwrite(pmd)	pte_pmd(pte_mkwrite(pmd_pte(pmd)))
+#define pmd_mkclean(pmd)       pte_pmd(pte_mkclean(pmd_pte(pmd)))
 #define pmd_mkdirty(pmd)	pte_pmd(pte_mkdirty(pmd_pte(pmd)))
 #define pmd_mkyoung(pmd)	pte_pmd(pte_mkyoung(pmd_pte(pmd)))
 #define pmd_mknotpresent(pmd)	(__pmd(pmd_val(pmd) & ~PMD_TYPE_MASK))

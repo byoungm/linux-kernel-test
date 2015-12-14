@@ -300,9 +300,9 @@ void __init fork_init(void)
 #define ARCH_MIN_TASKALIGN	L1_CACHE_BYTES
 #endif
 	/* create a slab on which task_structs can be allocated */
-	task_struct_cachep =
-		kmem_cache_create("task_struct", arch_task_struct_size,
-			ARCH_MIN_TASKALIGN, SLAB_PANIC | SLAB_NOTRACK, NULL);
+	task_struct_cachep = kmem_cache_create("task_struct",
+			arch_task_struct_size, ARCH_MIN_TASKALIGN,
+			SLAB_PANIC|SLAB_NOTRACK|SLAB_ACCOUNT, NULL);
 #endif
 
 	/* do the arch specific task caches init */
@@ -1249,7 +1249,6 @@ static struct task_struct *copy_process(unsigned long clone_flags,
 {
 	int retval;
 	struct task_struct *p;
-	void *cgrp_ss_priv[CGROUP_CANFORK_COUNT] = {};
 
 	if ((clone_flags & (CLONE_NEWNS|CLONE_FS)) == (CLONE_NEWNS|CLONE_FS))
 		return ERR_PTR(-EINVAL);
@@ -1348,9 +1347,9 @@ static struct task_struct *copy_process(unsigned long clone_flags,
 	prev_cputime_init(&p->prev_cputime);
 
 #ifdef CONFIG_VIRT_CPU_ACCOUNTING_GEN
-	seqlock_init(&p->vtime_seqlock);
+	seqcount_init(&p->vtime_seqcount);
 	p->vtime_snap = 0;
-	p->vtime_snap_whence = VTIME_SLEEPING;
+	p->vtime_snap_whence = VTIME_INACTIVE;
 #endif
 
 #if defined(SPLIT_RSS_COUNTING)
@@ -1526,7 +1525,7 @@ static struct task_struct *copy_process(unsigned long clone_flags,
 	 * between here and cgroup_post_fork() if an organisation operation is in
 	 * progress.
 	 */
-	retval = cgroup_can_fork(p, cgrp_ss_priv);
+	retval = cgroup_can_fork(p);
 	if (retval)
 		goto bad_fork_free_pid;
 
@@ -1608,7 +1607,7 @@ static struct task_struct *copy_process(unsigned long clone_flags,
 	write_unlock_irq(&tasklist_lock);
 
 	proc_fork_connector(p);
-	cgroup_post_fork(p, cgrp_ss_priv);
+	cgroup_post_fork(p);
 	threadgroup_change_end(current);
 	perf_event_fork(p);
 
@@ -1618,7 +1617,7 @@ static struct task_struct *copy_process(unsigned long clone_flags,
 	return p;
 
 bad_fork_cancel_cgroup:
-	cgroup_cancel_fork(p, cgrp_ss_priv);
+	cgroup_cancel_fork(p);
 bad_fork_free_pid:
 	if (pid != &init_struct_pid)
 		free_pid(pid);
@@ -1848,16 +1847,19 @@ void __init proc_caches_init(void)
 	sighand_cachep = kmem_cache_create("sighand_cache",
 			sizeof(struct sighand_struct), 0,
 			SLAB_HWCACHE_ALIGN|SLAB_PANIC|SLAB_DESTROY_BY_RCU|
-			SLAB_NOTRACK, sighand_ctor);
+			SLAB_NOTRACK|SLAB_ACCOUNT, sighand_ctor);
 	signal_cachep = kmem_cache_create("signal_cache",
 			sizeof(struct signal_struct), 0,
-			SLAB_HWCACHE_ALIGN|SLAB_PANIC|SLAB_NOTRACK, NULL);
+			SLAB_HWCACHE_ALIGN|SLAB_PANIC|SLAB_NOTRACK|SLAB_ACCOUNT,
+			NULL);
 	files_cachep = kmem_cache_create("files_cache",
 			sizeof(struct files_struct), 0,
-			SLAB_HWCACHE_ALIGN|SLAB_PANIC|SLAB_NOTRACK, NULL);
+			SLAB_HWCACHE_ALIGN|SLAB_PANIC|SLAB_NOTRACK|SLAB_ACCOUNT,
+			NULL);
 	fs_cachep = kmem_cache_create("fs_cache",
 			sizeof(struct fs_struct), 0,
-			SLAB_HWCACHE_ALIGN|SLAB_PANIC|SLAB_NOTRACK, NULL);
+			SLAB_HWCACHE_ALIGN|SLAB_PANIC|SLAB_NOTRACK|SLAB_ACCOUNT,
+			NULL);
 	/*
 	 * FIXME! The "sizeof(struct mm_struct)" currently includes the
 	 * whole struct cpumask for the OFFSTACK case. We could change
@@ -1867,8 +1869,9 @@ void __init proc_caches_init(void)
 	 */
 	mm_cachep = kmem_cache_create("mm_struct",
 			sizeof(struct mm_struct), ARCH_MIN_MMSTRUCT_ALIGN,
-			SLAB_HWCACHE_ALIGN|SLAB_PANIC|SLAB_NOTRACK, NULL);
-	vm_area_cachep = KMEM_CACHE(vm_area_struct, SLAB_PANIC);
+			SLAB_HWCACHE_ALIGN|SLAB_PANIC|SLAB_NOTRACK|SLAB_ACCOUNT,
+			NULL);
+	vm_area_cachep = KMEM_CACHE(vm_area_struct, SLAB_PANIC|SLAB_ACCOUNT);
 	mmap_init();
 	nsproxy_cache_init();
 }

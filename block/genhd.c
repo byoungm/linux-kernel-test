@@ -852,7 +852,7 @@ static int show_partition(struct seq_file *seqf, void *v)
 	char buf[BDEVNAME_SIZE];
 
 	/* Don't show non-partitionable removeable devices or empty devices */
-	if (!get_capacity(sgp) || (!disk_max_parts(sgp) &&
+	if (!get_capacity(sgp) || (!(disk_max_parts(sgp) > 1) &&
 				   (sgp->flags & GENHD_FL_REMOVABLE)))
 		return 0;
 	if (sgp->flags & GENHD_FL_SUPPRESS_PARTITION_INFO)
@@ -1421,7 +1421,7 @@ static DEFINE_MUTEX(disk_events_mutex);
 static LIST_HEAD(disk_events);
 
 /* disable in-kernel polling by default */
-static unsigned long disk_events_dfl_poll_msecs	= 0;
+static unsigned long disk_events_dfl_poll_msecs;
 
 static unsigned long disk_events_poll_jiffies(struct gendisk *disk)
 {

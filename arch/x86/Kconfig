@@ -30,6 +30,7 @@ config X86
 	select ARCH_HAS_PMEM_API		if X86_64
 	select ARCH_HAS_MMIO_FLUSH
 	select ARCH_HAS_SG_CHAIN
+	select ARCH_HAS_UBSAN_SANITIZE_ALL
 	select ARCH_HAVE_NMI_SAFE_CMPXCHG
 	select ARCH_MIGHT_HAVE_ACPI_PDC		if ACPI
 	select ARCH_MIGHT_HAVE_PC_PARPORT
@@ -82,6 +83,8 @@ config X86
 	select HAVE_ARCH_KASAN			if X86_64 && SPARSEMEM_VMEMMAP
 	select HAVE_ARCH_KGDB
 	select HAVE_ARCH_KMEMCHECK
+	select HAVE_ARCH_MMAP_RND_BITS		if MMU
+	select HAVE_ARCH_MMAP_RND_COMPAT_BITS	if MMU && COMPAT
 	select HAVE_ARCH_SECCOMP_FILTER
 	select HAVE_ARCH_SOFT_DIRTY		if X86_64
 	select HAVE_ARCH_TRACEHOOK
@@ -96,7 +99,6 @@ config X86
 	select HAVE_DEBUG_KMEMLEAK
 	select HAVE_DEBUG_STACKOVERFLOW
 	select HAVE_DMA_API_DEBUG
-	select HAVE_DMA_ATTRS
 	select HAVE_DMA_CONTIGUOUS
 	select HAVE_DYNAMIC_FTRACE
 	select HAVE_DYNAMIC_FTRACE_WITH_REGS
@@ -126,6 +128,7 @@ config X86
 	select HAVE_MEMBLOCK
 	select HAVE_MEMBLOCK_NODE_MAP
 	select HAVE_MIXED_BREAKPOINTS_REGS
+	select HAVE_NMI
 	select HAVE_OPROFILE
 	select HAVE_OPTPROBES
 	select HAVE_PCSPKR_PLATFORM
@@ -177,11 +180,22 @@ config LOCKDEP_SUPPORT
 config STACKTRACE_SUPPORT
 	def_bool y
 
-config HAVE_LATENCYTOP_SUPPORT
-	def_bool y
-
 config MMU
 	def_bool y
+
+config ARCH_MMAP_RND_BITS_MIN
+       default 28 if 64BIT
+       default 8
+
+config ARCH_MMAP_RND_BITS_MAX
+	default 32 if 64BIT
+	default 16
+
+config ARCH_MMAP_RND_COMPAT_BITS_MIN
+	default 8
+
+config ARCH_MMAP_RND_COMPAT_BITS_MAX
+	default 16
 
 config SBUS
 	bool
@@ -636,7 +650,7 @@ config X86_32_IRIS
 
 config SCHED_OMIT_FRAME_POINTER
 	def_bool y
-	prompt "Single-depth WCHAN output"
+	prompt "Single-depth WCHAN output" if !LTO && !FRAME_POINTER
 	depends on X86
 	---help---
 	  Calculate simpler /proc/<PID>/wchan values. If this option
@@ -686,6 +700,14 @@ config PARAVIRT_SPINLOCKS
 	  benefit on paravirtualized KVM / Xen kernels.
 
 	  If you are unsure how to answer this question, answer Y.
+
+config QUEUED_LOCK_STAT
+	bool "Paravirt queued spinlock statistics"
+	depends on PARAVIRT_SPINLOCKS && DEBUG_FS && QUEUED_SPINLOCKS
+	---help---
+	  Enable the collection of statistical data on the slowpath
+	  behavior of paravirtualized queued spinlocks and report
+	  them on debugfs.
 
 source "arch/x86/xen/Kconfig"
 
